@@ -1,0 +1,23 @@
+[Unit]
+Description=Vizaro Daromad Bot
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=daromad
+Group=daromad
+WorkingDirectory=/opt/daromad-bot
+ExecStart=/usr/bin/python3 bot.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+
+# Restart limitlar
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target

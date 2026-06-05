@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pyo
+daromad.db
+daromad-bot.log
+*.log
+.DS_Store
+miniapp/
+config.json
