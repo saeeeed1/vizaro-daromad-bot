@@ -18,7 +18,7 @@ from handlers import (
     workers_list_handler, weekly_report_handler, monthly_report_handler,
     owner_all_workers_handler, owner_weekly_handler, owner_monthly_handler,
     income_conversation_handler, submit_conversation_handler,
-    rate_conversation_handler, hisobotim_handler,
+    hisobotim_handler,
 )
 from callbacks import accountant_confirm_callback, reject_reason_conversation_handler
 from scheduler import setup_scheduler
@@ -84,7 +84,6 @@ def main():
     # ── ConversationHandlers ───────────────────────────────────────────────
     app.add_handler(income_conversation_handler())
     app.add_handler(submit_conversation_handler())
-    app.add_handler(rate_conversation_handler())
     app.add_handler(reject_reason_conversation_handler())
 
     # ── Commands ───────────────────────────────────────────────────────────

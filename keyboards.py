@@ -13,7 +13,7 @@ def accountant_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup([
         ["💰 Kirim qo'shish"],
         ["👥 Ishchilar", "📊 Haftalik"],
-        ["📋 Oylik hisobot", "💱 Kurs"],
+        ["📋 Oylik hisobot"],
     ], resize_keyboard=True)
 
 

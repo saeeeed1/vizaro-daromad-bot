@@ -5,7 +5,7 @@ from aiohttp import web
 
 from config import load_config
 from database import Database
-from handlers import get_week_start, UZ_MONTHS
+from handlers import get_week_start, UZ_MONTHS, format_week_range
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ async def handle_dashboard(req: web.Request) -> web.Response:
     if role in ("worker", "accountant"):
         week_inc   = db.get_week_incomes(user_id, ws)
         month_inc  = db.get_month_incomes(user_id, today.year, today.month)
-        _, _, week_total = db.get_week_usd_uzs_totals(user_id, ws)
+        week_total = db.get_week_total_usd(user_id, ws)
         month_total = sum(i["amount_usd"] for i in month_inc)
 
         subs = db.get_worker_submissions(user_id)
@@ -125,7 +125,7 @@ async def handle_dashboard(req: web.Request) -> web.Response:
         worker_stats = []
         for w in workers:
             wid = w["telegram_user_id"]
-            _, _, wtotal = db.get_week_usd_uzs_totals(wid, ws)
+            wtotal = db.get_week_total_usd(wid, ws)
             if wid in pending_ids:
                 pending_total += wtotal;  sub_status = "pending"
             elif db.has_week_submission(wid, ws):
@@ -195,6 +195,111 @@ async def handle_history(req: web.Request) -> web.Response:
     }))
 
 
+def _utc_to_local(dt_str: str, tz: str = "Asia/Tashkent") -> str:
+    """UTC isoformat → 'YYYY-MM-DD HH:MM' mahalliy vaqt."""
+    if not dt_str:
+        return ""
+    try:
+        from datetime import datetime as _dt
+        from zoneinfo import ZoneInfo
+        dt = _dt.fromisoformat(dt_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+        loc = dt.astimezone(ZoneInfo(tz))
+        return loc.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return dt_str[:16]
+
+
+async def handle_accountant(req: web.Request) -> web.Response:
+    config, db = _get_ctx()
+    try:
+        user_id = int(req.rel_url.query.get("user_id", 0))
+    except ValueError:
+        return _cors(web.json_response({"error": "invalid user_id"}, status=400), _origin(req))
+
+    if config.get_role(user_id) != "accountant":
+        return _cors(web.json_response({"error": "unauthorized"}, status=403), _origin(req))
+
+    today = date.today()
+    ws    = get_week_start()
+
+    workers     = db.get_all_users_by_role("worker")
+    submissions = db.get_week_submissions_with_worker(ws)
+    sub_by_wid  = {s["worker_id"]: s for s in submissions}
+
+    # ── Haftalik qabul qilingan va kutilmoqda ─────────────────────────────
+    received: list = []
+    pending_list: list = []
+
+    for s in submissions:
+        wid       = s["worker_id"]
+        usd       = db.get_week_total_usd(wid, ws)
+        inc_count = len(db.get_week_incomes(wid, ws))
+        status    = s["accountant_action"] or "pending"
+        item = {
+            "worker_id":    wid,
+            "worker_name":  s.get("full_name") or s.get("username") or str(wid),
+            "total_usd":    round(usd, 2),
+            "count":        inc_count,
+            "confirmed_at": _utc_to_local(s["actioned_at"] or ""),
+            "status":       status,
+        }
+        (received if status == "confirmed" else pending_list).append(item)
+
+    # Workers who haven't submitted
+    for w in workers:
+        wid = w["telegram_user_id"]
+        if wid in sub_by_wid:
+            continue
+        usd       = db.get_week_total_usd(wid, ws)
+        inc_count = len(db.get_week_incomes(wid, ws))
+        pending_list.append({
+            "worker_id":    wid,
+            "worker_name":  w["full_name"] or w["username"] or str(wid),
+            "total_usd":    round(usd, 2),
+            "count":        inc_count,
+            "confirmed_at": "",
+            "status":       "not_submitted",
+        })
+
+    # ── Oylik summary ─────────────────────────────────────────────────────
+    month_incs          = db.get_all_incomes_for_month(today.year, today.month)
+    m_confirmed         = [i for i in month_incs if i.get("status") == "confirmed"]
+    m_usd_total         = sum(i["amount_usd"] for i in m_confirmed)
+    m_workers_confirmed = len({i["user_id"] for i in m_confirmed})
+
+    # ── Bugalterning o'z daromadi ─────────────────────────────────────────
+    acc_week_inc = db.get_week_incomes(user_id, ws)
+    acc_total    = db.get_week_total_usd(user_id, ws)
+    acc_month_inc = db.get_month_incomes(user_id, today.year, today.month)
+    acc_m_total   = sum(i["amount_usd"] for i in acc_month_inc)
+
+    # ── Summary ───────────────────────────────────────────────────────────
+    sum_usd = sum(r["total_usd"] for r in received)
+
+    return _cors(web.json_response({
+        "period":     "week",
+        "week_label": format_week_range(ws),
+        "received":   received,
+        "pending":    pending_list,
+        "summary": {
+            "total_usd":       round(sum_usd, 2),
+            "confirmed_count": len(received),
+            "pending_count":   len(pending_list),
+        },
+        "month_summary": {
+            "total_usd":       round(m_usd_total, 2),
+            "confirmed_count": m_workers_confirmed,
+        },
+        "own_income": {
+            "total_usd":   round(acc_total, 2),
+            "count":       len(acc_week_inc),
+            "month_total": round(acc_m_total, 2),
+        },
+    }), _origin(req))
+
+
 def _fmt_income(inc: dict) -> dict:
     return {
         "id":          inc["id"],
@@ -210,10 +315,11 @@ def _fmt_income(inc: dict) -> dict:
 
 async def start_api_server():
     app = web.Application()
-    app.router.add_get("/api/me",        handle_me)
-    app.router.add_get("/api/dashboard", handle_dashboard)
-    app.router.add_get("/api/history",   handle_history)
-    app.router.add_options("/{tail:.*}", handle_options)
+    app.router.add_get("/api/me",          handle_me)
+    app.router.add_get("/api/dashboard",   handle_dashboard)
+    app.router.add_get("/api/history",     handle_history)
+    app.router.add_get("/api/accountant",  handle_accountant)
+    app.router.add_options("/{tail:.*}",   handle_options)
 
     runner = web.AppRunner(app)
     await runner.setup()

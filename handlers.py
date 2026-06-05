@@ -1,6 +1,6 @@
 import re
 import logging
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime as _dt
 from typing import Optional, Tuple
 
 from telegram import Update
@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 INCOME_INPUT   = 1
 INCOME_CONFIRM = 2
 SUBMIT_CONFIRM = 3
-RATE_INPUT     = 5
 
 # ── Uzbek locale helpers ───────────────────────────────────────────────────
 UZ_MONTHS = {
@@ -33,6 +32,23 @@ UZ_DAYS = {
     0: "Dushanba", 1: "Seshanba", 2: "Chorshanba",
     3: "Payshanba", 4: "Juma",    5: "Shanba",    6: "Yakshanba",
 }
+
+
+def _fmt_dt(dt_str: str, tz: str = "Asia/Tashkent") -> str:
+    """UTC ISO string → mahalliy vaqt: '6-iyn 01:10'"""
+    if not dt_str:
+        return "—"
+    try:
+        from zoneinfo import ZoneInfo
+        dt = _dt.fromisoformat(dt_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+        loc = dt.astimezone(ZoneInfo(tz))
+        m = {1:"yan",2:"fev",3:"mar",4:"apr",5:"may",6:"iyn",
+             7:"iyl",8:"avg",9:"sen",10:"okt",11:"noy",12:"dek"}
+        return f"{loc.day}-{m[loc.month]} {loc.hour:02d}:{loc.minute:02d}"
+    except Exception:
+        return dt_str[5:16] if len(dt_str) >= 16 else dt_str
 
 
 def get_week_start(d: date = None) -> date:
@@ -53,26 +69,20 @@ def format_week_range(week_start: date) -> str:
             f" – {week_end.day} {UZ_MONTHS[week_end.month]}")
 
 
-def parse_income_text(text: str) -> Optional[Tuple[str, float, str]]:
+def parse_income_text(text: str) -> Optional[Tuple[str, float]]:
+    """Faqat USD qabul qilinadi: 'TAS JED 30$' → ('TAS JED', 30.0)"""
     text = text.strip()
-    pattern = r"^(.+?)\s+([\d][.\d,]*)\s*(\$|so'?m|usd|uzs)?$"
+    pattern = r"^(.+?)\s+([\d][.\d,]*)\s*(\$|usd)?$"
     match = re.match(pattern, text, re.IGNORECASE)
     if not match:
         return None
     desc = match.group(1).strip().upper()
     amount_str = match.group(2).replace(",", "")
-    currency_raw = (match.group(3) or "").strip().lower()
     try:
         amount = float(amount_str)
     except ValueError:
         return None
-    if currency_raw in ("$", "usd"):
-        currency = "USD"
-    elif currency_raw in ("so'm", "som", "uzs"):
-        currency = "UZS"
-    else:
-        currency = "UZS"
-    return desc, amount, currency
+    return desc, amount
 
 
 # ── /start ─────────────────────────────────────────────────────────────────
@@ -114,8 +124,7 @@ async def income_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Kirim turini va summani yozing:\n\n"
         "<code>TAS JED 30$</code>\n"
         "<code>HOTEL 80 USD</code>\n"
-        "<code>BILET 500000 so'm</code>\n"
-        "<code>TRANSFER 1500000</code>  ← so'm (default)\n\n"
+        "<code>TRANSFER 250</code>  ← $ (default)\n\n"
         "Bekor qilish: /cancel",
         parse_mode="HTML",
         reply_markup=cancel_keyboard(),
@@ -129,26 +138,34 @@ async def income_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text == "❌ Bekor qilish":
             return await income_cancel(update, context)
 
-        parsed = parse_income_text(text)
-        if not parsed:
+        # So'm/UZS kiritilsa maxsus xato
+        if re.search(r"so'?m|uzs", text, re.IGNORECASE):
             await update.message.reply_text(
-                "❌ Format noto'g'ri. Qaytadan yozing:\n\n"
-                "<code>TAS JED 30$</code>  yoki  <code>HOTEL 500000 so'm</code>",
+                "❌ Faqat dollar ($) qabul qilinadi.\n"
+                "Misol: <code>TAS JED 30$</code>",
                 parse_mode="HTML",
             )
             return INCOME_INPUT
 
-        desc, amount, currency = parsed
+        parsed = parse_income_text(text)
+        if not parsed:
+            await update.message.reply_text(
+                "❌ Format noto'g'ri. Qaytadan yozing:\n\n"
+                "<code>TAS JED 30$</code>  yoki  <code>HOTEL 80 USD</code>",
+                parse_mode="HTML",
+            )
+            return INCOME_INPUT
+
+        desc, amount = parsed
         context.user_data["pending_income"] = {
-            "description": desc, "amount": amount, "currency": currency
+            "description": desc, "amount": amount
         }
 
-        display = f"${amount:,.2f}" if currency == "USD" else f"{amount:,.0f} so'm"
         await update.message.reply_text(
             f"📝 <b>Tasdiqlash</b>\n"
             f"──────────────────────\n"
             f"Tur:    <b>{desc}</b>\n"
-            f"Summa:  <b>{display}</b>\n\n"
+            f"Summa:  <b>${amount:,.2f}</b>\n\n"
             f"Tasdiqlaysizmi?",
             parse_mode="HTML",
             reply_markup=confirm_inline("income_yes", "income_no"),
@@ -179,28 +196,25 @@ async def income_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     try:
-        rate = db.get_current_rate(config.usd_to_uzs)
-        amount_usd = income["amount"] if income["currency"] == "USD" else income["amount"] / rate
         week_start = get_week_start()
 
         db.add_income(
             user_id=user_id,
             description=income["description"],
             amount=income["amount"],
-            currency=income["currency"],
-            amount_usd=amount_usd,
+            currency="USD",
+            amount_usd=income["amount"],
             week_start=week_start,
         )
 
-        _, _, week_total = db.get_week_usd_uzs_totals(user_id, week_start)
+        week_total = db.get_week_total_usd(user_id, week_start)
         today = date.today()
-        display = f"${income['amount']:,.2f}" if income["currency"] == "USD" else f"{income['amount']:,.0f} so'm"
 
         await query.edit_message_text(
             f"💰 <b>Kirim qayd etildi</b>\n"
             f"─────────────────────────\n"
             f"📝 Tur:      <b>{income['description']}</b>\n"
-            f"💵 Summa:    <b>{display}</b>\n"
+            f"💵 Summa:    <b>${income['amount']:,.2f}</b>\n"
             f"📅 Sana:     <b>{format_date_uz(today)}</b>\n"
             f"📊 Bu hafta: <b>${week_total:,.2f}</b>",
             parse_mode="HTML",
@@ -258,7 +272,7 @@ def income_conversation_handler() -> ConversationHandler:
     )
 
 
-# ── Show week — USD/UZS breakdown ─────────────────────────────────────────
+# ── Show week ─────────────────────────────────────────────────────────────
 
 async def show_week_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
@@ -279,7 +293,7 @@ async def show_week_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        usd_direct, uzs_total, total_eq = db.get_week_usd_uzs_totals(user_id, week_start)
+        total_usd = db.get_week_total_usd(user_id, week_start)
         today = date.today()
 
         lines = [
@@ -289,18 +303,9 @@ async def show_week_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "",
         ]
         for idx, rec in enumerate(incomes, 1):
-            amt = f"${rec['amount']:,.2f}" if rec["currency"] == "USD" else f"{rec['amount']:,.0f} so'm"
-            lines.append(f"{idx}. {rec['description']} — <b>{amt}</b>")
+            lines.append(f"{idx}. {rec['description']} — <b>${rec['amount_usd']:,.2f}</b>")
 
-        lines.append("─────────────────────────")
-        if usd_direct > 0:
-            lines.append(f"💵 Jami USD:  <b>${usd_direct:,.2f}</b>")
-        if uzs_total > 0:
-            lines.append(f"💴 Jami UZS:  <b>{uzs_total:,.0f} so'm</b>")
-        if usd_direct > 0 and uzs_total > 0:
-            lines.append(f"💰 Umumiy:    <b>${total_eq:,.2f}</b>  (~$ga)")
-        else:
-            lines.append(f"💰 Jami:      <b>${total_eq:,.2f}</b>")
+        lines += ["─────────────────────────", f"💰 Jami: <b>${total_usd:,.2f}</b>"]
 
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
     except Exception as e:
@@ -423,12 +428,10 @@ async def submit_week_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return ConversationHandler.END
 
         total_usd = sum(i["amount_usd"] for i in incomes)
-        total_uzs = sum(i["amount"] for i in incomes if i["currency"] == "UZS")
 
         context.user_data["pending_submit"] = {
             "week_start": week_start.isoformat(),
             "total_usd": total_usd,
-            "total_uzs": total_uzs,
             "count": len(incomes),
         }
 
@@ -473,7 +476,7 @@ async def submit_week_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE
             worker_id=user_id,
             week_start=week_start,
             total_usd=submit["total_usd"],
-            total_uzs=submit["total_uzs"],
+            total_uzs=0.0,
         )
 
         await query.edit_message_text(
@@ -530,91 +533,6 @@ def submit_conversation_handler() -> ConversationHandler:
     )
 
 
-# ── Valyuta kursi conversation (accountant) ───────────────────────────────
-
-async def rate_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    config: Config = context.bot_data["config"]
-    db: Database = context.bot_data["db"]
-    if config.get_role(update.effective_user.id) != "accountant":
-        return ConversationHandler.END
-
-    current_rate = db.get_current_rate(config.usd_to_uzs)
-    await update.message.reply_text(
-        f"💱 <b>Valyuta kursi</b>\n\n"
-        f"Hozirgi kurs: <b>1$ = {current_rate:,.0f} so'm</b>\n\n"
-        f"Yangi kurs kiriting:\n<code>12800</code>\n\n"
-        f"Bekor qilish: /cancel",
-        parse_mode="HTML",
-        reply_markup=cancel_keyboard(),
-    )
-    return RATE_INPUT
-
-
-async def rate_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        text = update.message.text.strip()
-        if text == "❌ Bekor qilish":
-            return await rate_cancel(update, context)
-
-        try:
-            new_rate = float(text.replace(",", "").replace(" ", ""))
-            if not (1000 <= new_rate <= 200000):
-                raise ValueError("out of range")
-        except ValueError:
-            await update.message.reply_text(
-                "❌ Noto'g'ri format. Son kiriting, masalan: <code>12800</code>",
-                parse_mode="HTML",
-            )
-            return RATE_INPUT
-
-        config: Config = context.bot_data["config"]
-        db: Database = context.bot_data["db"]
-        user_id = update.effective_user.id
-
-        db.set_rate(new_rate, user_id)
-
-        await update.message.reply_text(
-            f"✅ <b>Kurs yangilandi!</b>\n\n💱 1$ = <b>{new_rate:,.0f} so'm</b>",
-            parse_mode="HTML",
-            reply_markup=get_role_keyboard("accountant"),
-        )
-
-        if config.owner_id:
-            try:
-                await context.bot.send_message(
-                    config.owner_id,
-                    f"💱 <b>Kurs yangilandi</b>\n\n1$ = <b>{new_rate:,.0f} so'm</b>",
-                    parse_mode="HTML",
-                )
-            except Exception:
-                pass
-
-        return ConversationHandler.END
-    except Exception as e:
-        logger.error(f"rate_input: {e}")
-        return RATE_INPUT
-
-
-async def rate_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    config: Config = context.bot_data["config"]
-    role = config.get_role(update.effective_user.id)
-    await update.message.reply_text("❌ Bekor qilindi.", reply_markup=get_role_keyboard(role))
-    return ConversationHandler.END
-
-
-def rate_conversation_handler() -> ConversationHandler:
-    return ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^💱 Kurs$"), rate_start)],
-        states={
-            RATE_INPUT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, rate_input),
-            ],
-        },
-        fallbacks=[
-            CommandHandler("cancel", rate_cancel),
-            MessageHandler(filters.Regex("^❌ Bekor qilish$"), rate_cancel),
-        ],
-    )
 
 
 # ── Accountant: ishchilar ro'yxati + pending ──────────────────────────────
@@ -642,22 +560,31 @@ async def workers_list_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             "─────────────────────────",
         ]
         for w in workers:
-            wid = w["telegram_user_id"]
+            wid  = w["telegram_user_id"]
             name = w["full_name"] or w["username"] or str(wid)
-            _, _, total = db.get_week_usd_uzs_totals(wid, week_start)
-            incomes = db.get_week_incomes(wid, week_start)
+            total = db.get_week_total_usd(wid, week_start)
+            incomes    = db.get_week_incomes(wid, week_start)
+            submission = db.get_worker_week_submission(wid, week_start)
 
-            if wid in pending_worker_ids:
-                status = "⏳ tasdiqlash kutilmoqda"
-            elif db.has_week_submission(wid, week_start):
-                status = "✅ tasdiqlandi"
-            elif incomes:
-                status = "📤 hali topshirmagan"
-            else:
-                status = "— kirim yo'q"
-
+            lines.append(f"")
             lines.append(f"🧑‍💼 <b>{name}</b>")
-            lines.append(f"   ${total:,.2f} ({len(incomes)} ta)  {status}")
+            if incomes:
+                lines.append(f"   💰 ${total:,.2f}  ({len(incomes)} ta kirim)")
+            else:
+                lines.append(f"   — kirim yo'q")
+
+            if submission:
+                action = submission["accountant_action"]
+                if action == "confirmed":
+                    when = _fmt_dt(submission["actioned_at"])
+                    lines.append(f"   ✅ Tasdiqlandi: {when}")
+                elif action == "rejected":
+                    note = submission["accountant_note"] or "—"
+                    lines.append(f"   ❌ Rad etildi: <i>{note}</i>")
+                else:
+                    lines.append(f"   ⏳ Topshirilgan — kutilmoqda")
+            elif incomes:
+                lines.append(f"   📤 Hali topshirilmagan")
 
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
@@ -691,29 +618,67 @@ async def weekly_report_handler(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
         week_start = get_week_start()
-        incomes = db.get_all_incomes_for_week(week_start)
+        workers     = db.get_all_users_by_role("worker")
+        submissions = db.get_week_submissions_with_worker(week_start)
+        sub_by_wid  = {s["worker_id"]: s for s in submissions}
 
-        if not incomes:
-            await update.message.reply_text(
-                f"📊 Bu hafta ({format_week_range(week_start)}) kirim yo'q."
-            )
-            return
-
-        total_usd = sum(i["amount_usd"] for i in incomes)
-        by_worker: dict = {}
-        for inc in incomes:
-            name = inc.get("full_name") or inc.get("username") or str(inc["user_id"])
-            by_worker.setdefault(name, {"total": 0.0, "count": 0})
-            by_worker[name]["total"] += inc["amount_usd"]
-            by_worker[name]["count"] += 1
+        confirmed = [s for s in submissions if s["accountant_action"] == "confirmed"]
+        pending   = [s for s in submissions if not s["accountant_action"]]
+        not_submitted = [
+            w for w in workers
+            if w["telegram_user_id"] not in sub_by_wid
+        ]
 
         lines = [
             f"📊 <b>Haftalik hisobot — {format_week_range(week_start)}</b>",
             "─────────────────────────",
+            "",
+            "👥 <b>Ishchilardan qabul qilindi:</b>",
         ]
-        for name, data in by_worker.items():
-            lines.append(f"👤 <b>{name}</b>: ${data['total']:,.2f} ({data['count']} ta)")
-        lines += ["─────────────────────────", f"💵 <b>Umumiy jami: ${total_usd:,.2f}</b>"]
+
+        grand_usd = 0.0
+
+        if confirmed:
+            for s in confirmed:
+                name  = s.get("full_name") or s.get("username") or str(s["worker_id"])
+                total = db.get_week_total_usd(s["worker_id"], week_start)
+                when  = _fmt_dt(s["actioned_at"])
+                lines.append(f"")
+                lines.append(f"✅ <b>{name}</b>")
+                lines.append(f"   ${total:,.2f}")
+                lines.append(f"   <i>Tasdiqlangan: {when}</i>")
+                grand_usd += total
+        else:
+            lines.append("   — (hali tasdiqlanmagan)")
+
+        if pending:
+            lines.append("")
+            lines.append("⏳ <b>Kutilmoqda:</b>")
+            for s in pending:
+                name  = s.get("full_name") or s.get("username") or str(s["worker_id"])
+                total = db.get_week_total_usd(s["worker_id"], week_start)
+                lines.append(f"   ⏳ {name}: ${total:,.2f}")
+
+        if not_submitted:
+            lines.append("")
+            lines.append("📤 <b>Hali topshirmagan:</b>")
+            for w in not_submitted:
+                name  = w["full_name"] or w["username"] or str(w["telegram_user_id"])
+                total = db.get_week_total_usd(w["telegram_user_id"], week_start)
+                if total > 0:
+                    lines.append(f"   — {name}: ${total:,.2f} kirim bor")
+                else:
+                    lines.append(f"   — {name}: kirim yo'q")
+        elif not pending:
+            lines.append("")
+            lines.append("⏳ <b>Hali topshirmagan:</b>")
+            lines.append("   — (hamma topshirdi)")
+
+        lines.append("─────────────────────────")
+        if grand_usd > 0:
+            lines.append(f"💰 <b>Jami qabul: ${grand_usd:,.2f}</b>")
+        else:
+            lines.append("💵 Hali qabul qilinmagan")
 
         await update.message.reply_text("\n".join(lines), parse_mode="HTML")
     except Exception as e:
@@ -782,7 +747,7 @@ async def owner_all_workers_handler(update: Update, context: ContextTypes.DEFAUL
         # Workers sorted by total (medal ranking)
         workers_data = []
         for w in workers:
-            _, _, total = db.get_week_usd_uzs_totals(w["telegram_user_id"], week_start)
+            total = db.get_week_total_usd(w["telegram_user_id"], week_start)
             workers_data.append((w, total))
         workers_data.sort(key=lambda x: x[1], reverse=True)
 
@@ -810,7 +775,7 @@ async def owner_all_workers_handler(update: Update, context: ContextTypes.DEFAUL
             lines.append(f"{medal} <b>{name}</b>  ${total:,.2f}")
 
         for acc in accountants:
-            _, _, total = db.get_week_usd_uzs_totals(acc["telegram_user_id"], week_start)
+            total = db.get_week_total_usd(acc["telegram_user_id"], week_start)
             total_all += total
             name = acc["full_name"] or acc["username"] or str(acc["telegram_user_id"])
             lines.append(f"🧮 <b>{name}</b>  ${total:,.2f}")
