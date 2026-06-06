@@ -222,6 +222,14 @@ async def handle_accountant(req: web.Request) -> web.Response:
         return _cors(web.json_response({"error": "unauthorized"}, status=403), _origin(req))
 
     today = date.today()
+    if today.weekday() != 5:
+        days_ahead = (5 - today.weekday()) % 7 or 7
+        next_sat   = today + timedelta(days=days_ahead)
+        return _cors(web.json_response({
+            "show": False,
+            "next_saturday": next_sat.isoformat(),
+        }), _origin(req))
+
     ws    = get_week_start()
 
     workers     = db.get_all_users_by_role("manager")

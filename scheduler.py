@@ -92,6 +92,53 @@ async def send_monthly_report_to_owner(context):
         logger.error(f"send_monthly_report_to_owner: {e}")
 
 
+async def send_weekly_report_to_accountant(context):
+    config: Config = context.bot_data["config"]
+    db: Database = context.bot_data["db"]
+
+    if not config.accountant_id:
+        return
+
+    week_start  = get_week_start()
+    workers     = db.get_all_users_by_role("manager")
+    submissions = db.get_week_submissions_with_worker(week_start)
+    sub_by_wid  = {s["worker_id"]: s for s in submissions}
+    confirmed   = [s for s in submissions if s["accountant_action"] == "confirmed"]
+    not_submitted = [w for w in workers if w["telegram_user_id"] not in sub_by_wid]
+
+    lines = [
+        "📊 <b>Haftalik hisobot</b>",
+        f"<b>{format_week_range(week_start)}</b>",
+        "─────────────────────────",
+    ]
+
+    grand_usd = 0.0
+    for s in confirmed:
+        name  = s.get("full_name") or s.get("username") or str(s["worker_id"])
+        total = db.get_week_total_usd(s["worker_id"], week_start)
+        grand_usd += total
+        lines.append(f"💰 <b>{name}</b>   ${total:,.2f}")
+
+    lines += ["─────────────────────────", f"📦 <b>Jami:</b>   ${grand_usd:,.2f}"]
+
+    if not_submitted:
+        lines.append("")
+        lines.append("⚠️ <b>Hali topshirmagan:</b>")
+        for w in not_submitted:
+            name = w["full_name"] or w["username"] or str(w["telegram_user_id"])
+            lines.append(f"❌ {name}")
+
+    try:
+        await context.bot.send_message(
+            config.accountant_id,
+            "\n".join(lines),
+            parse_mode="HTML",
+        )
+        logger.info("Weekly report sent to accountant")
+    except Exception as e:
+        logger.error(f"send_weekly_report_to_accountant: {e}")
+
+
 async def new_week_greeting(context):
     config: Config = context.bot_data["config"]
     db: Database = context.bot_data["db"]
@@ -116,7 +163,9 @@ def setup_scheduler(app: Application):
     tz = ZoneInfo(config.timezone)
     jq = app.job_queue
 
-    # Shanba 10:00 — birinchi eslatma
+    # Shanba 09:00 — bugalterga haftalik hisobot
+    jq.run_daily(send_weekly_report_to_accountant, time=time(9, 0, tzinfo=tz), days=(5,))
+    # Shanba 10:00 — ishchilarga birinchi eslatma
     jq.run_daily(remind_submit_morning, time=time(10, 0, tzinfo=tz), days=(5,))
     # Shanba 18:00 — ikkinchi eslatma
     jq.run_daily(remind_submit_evening, time=time(18, 0, tzinfo=tz), days=(5,))
@@ -125,4 +174,4 @@ def setup_scheduler(app: Application):
     # Dushanba 09:00 — yangi hafta salomlashuvi
     jq.run_daily(new_week_greeting, time=time(9, 0, tzinfo=tz), days=(0,))
 
-    logger.info("Scheduler setup complete: 4 jobs registered")
+    logger.info("Scheduler setup complete: 5 jobs registered")

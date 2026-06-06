@@ -617,6 +617,19 @@ async def weekly_report_handler(update: Update, context: ContextTypes.DEFAULT_TY
         if config.get_role(user_id) != "accountant":
             return
 
+        today = date.today()
+        if today.weekday() != 5:
+            days_ahead = (5 - today.weekday()) % 7 or 7
+            next_sat = today + timedelta(days=days_ahead)
+            next_sat_str = f"{next_sat.day}-{UZ_MONTHS[next_sat.month]}, {next_sat.year}"
+            await update.message.reply_text(
+                f"⏳ Haftalik hisobot faqat shanba kuni ko'rinadi.\n"
+                f"─────────────────────────────\n"
+                f"📅 Keyingi shanba: <b>{next_sat_str}</b>",
+                parse_mode="HTML",
+            )
+            return
+
         week_start = get_week_start()
         workers     = db.get_all_users_by_role("manager")
         submissions = db.get_week_submissions_with_worker(week_start)
