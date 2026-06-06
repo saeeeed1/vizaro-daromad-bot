@@ -101,19 +101,16 @@ async def handle_dashboard(req: web.Request) -> web.Response:
             return y, m
 
         if period == "month":
+            first_day = date(today.year, today.month, 1)
             m_all = db.get_month_incomes(user_id, today.year, today.month)
             chart = []
-            ws_it = get_week_start(date(today.year, today.month, 1))
-            idx = 1
-            while ws_it <= today:
-                we = ws_it + timedelta(days=6)
-                total = sum(
-                    i["amount_usd"] for i in m_all
-                    if ws_it <= date.fromisoformat(i["created_at"][:10]) <= we
+            for i in range((today - first_day).days + 1):
+                d = first_day + timedelta(days=i)
+                day_total = sum(
+                    inc["amount_usd"] for inc in m_all
+                    if inc["created_at"][:10] == d.isoformat()
                 )
-                chart.append({"day": f"{idx}-h", "date": ws_it.isoformat(), "total": round(total, 2)})
-                ws_it += timedelta(days=7)
-                idx += 1
+                chart.append({"day": UZ_DAYS_SHORT[d.weekday()], "date": d.isoformat(), "total": round(day_total, 2)})
         elif period in ("3month", "6month", "year"):
             n_months  = {"3month": 3, "6month": 6, "year": 12}[period]
             label_map = UZ_M_MED if period == "3month" else UZ_M_S
