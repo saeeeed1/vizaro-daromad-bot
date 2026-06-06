@@ -26,18 +26,9 @@ async def _remind_workers(context, second_call: bool = False):
         total = sum(i["amount_usd"] for i in incomes)
         try:
             if second_call:
-                text = (
-                    f"⏰ <b>Eslatma (oxirgi)!</b>\n\n"
-                    f"Hali haftalik hisobotingizni topshirmadingiz.\n"
-                    f"💵 Bu hafta: <b>${total:,.2f}</b>\n\n"
-                    f"«📦 Bugalterga topshirish» tugmasini bosing."
-                )
+                text = f"📦 Bugun hafta hisobot kuni! (oxirgi eslatma)\nJami: <b>${total:,.2f}</b>"
             else:
-                text = (
-                    f"📦 <b>Bugun shanba!</b>\n\n"
-                    f"Haftalik kirimlaringizni bugalterga topshirishni unutmang.\n"
-                    f"💵 Bu hafta: <b>${total:,.2f}</b>"
-                )
+                text = f"📦 Bugun hafta hisobot kuni!\nJami: <b>${total:,.2f}</b>"
             await context.bot.send_message(wid, text, parse_mode="HTML")
         except Exception as e:
             logger.warning(f"remind worker {wid}: {e}")
@@ -149,10 +140,7 @@ async def new_week_greeting(context):
         try:
             await context.bot.send_message(
                 member["telegram_user_id"],
-                f"🌅 <b>Yangi hafta boshlandi!</b>\n"
-                f"📅 <b>{format_week_range(week_start)}</b>\n\n"
-                f"Bugun ham omad! 💪",
-                parse_mode="HTML",
+                "🌅 Yangi hafta boshlandi",
             )
         except Exception as e:
             logger.warning(f"new_week_greeting {member['telegram_user_id']}: {e}")

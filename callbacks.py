@@ -55,11 +55,7 @@ async def accountant_confirm_callback(update: Update, context: ContextTypes.DEFA
             full_name = str(worker_id)
 
         await query.edit_message_text(
-            f"✅ <b>Tasdiqlandi</b>\n"
-            f"─────────────────────────\n"
-            f"👤 Menejer: <b>{full_name}</b>\n"
-            f"📅 Hafta:  <b>{format_week_range(week_start)}</b>\n"
-            f"💵 Jami:   <b>${submission['total_usd']:,.2f}</b>",
+            f"✅ {full_name} · <b>${submission['total_usd']:,.2f}</b>",
             parse_mode="HTML",
         )
 
@@ -67,9 +63,8 @@ async def accountant_confirm_callback(update: Update, context: ContextTypes.DEFA
         try:
             await context.bot.send_message(
                 worker_id,
-                f"✅ <b>Haftalik hisobotingiz tasdiqlandi!</b>\n\n"
-                f"📅 Hafta: <b>{format_week_range(week_start)}</b>\n"
-                f"💵 Jami:  <b>${submission['total_usd']:,.2f}</b>",
+                f"✅ <b>${submission['total_usd']:,.2f}</b> qabul qilindi\n"
+                f"📦 Hafta jami: <b>${submission['total_usd']:,.2f}</b>",
                 parse_mode="HTML",
             )
         except Exception:
@@ -80,8 +75,7 @@ async def accountant_confirm_callback(update: Update, context: ContextTypes.DEFA
             try:
                 await context.bot.send_message(
                     config.owner_id,
-                    f"✅ <b>Tasdiqlandi</b>\n"
-                    f"👤 {full_name} — ${submission['total_usd']:,.2f}",
+                    f"✅ {full_name} → Bugalter · <b>${submission['total_usd']:,.2f}</b>",
                     parse_mode="HTML",
                 )
             except Exception:
@@ -120,10 +114,7 @@ async def acc_reject_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["rejecting_submission_id"] = submission_id
 
         await query.edit_message_text(
-            f"❌ <b>Rad etish</b>\n\n"
-            f"Rad etish sababini yozing\n"
-            f"(Bekor qilish: /cancel):",
-            parse_mode="HTML",
+            "❌ Rad etish sababini yozing:",
         )
         return REJECT_REASON
     except Exception as e:
@@ -153,7 +144,7 @@ async def acc_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
         week_start = date.fromisoformat(submission["week_start"])
 
         await update.message.reply_text(
-            f"✅ Rad etildi. Menejarga xabar yuborildi.",
+            "❌ Rad etildi.",
             reply_markup=get_role_keyboard(config.get_role(user_id)),
         )
 
@@ -161,10 +152,8 @@ async def acc_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_message(
                 worker_id,
-                f"❌ <b>Haftalik hisobotingiz rad etildi</b>\n\n"
-                f"📅 Hafta: <b>{format_week_range(week_start)}</b>\n"
-                f"💵 Jami:  <b>${submission['total_usd']:,.2f}</b>\n\n"
-                f"📝 Sabab: <i>{note}</i>",
+                f"❌ <b>${submission['total_usd']:,.2f}</b> rad etildi\n"
+                f"💬 Sabab: {note}",
                 parse_mode="HTML",
             )
         except Exception:
@@ -177,9 +166,7 @@ async def acc_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 full_name = worker.full_name or str(worker_id)
                 await context.bot.send_message(
                     config.owner_id,
-                    f"❌ <b>Rad etildi</b>\n"
-                    f"👤 {full_name} — ${submission['total_usd']:,.2f}\n"
-                    f"📝 Sabab: <i>{note}</i>",
+                    f"❌ {full_name} · <b>${submission['total_usd']:,.2f}</b> · {note}",
                     parse_mode="HTML",
                 )
             except Exception:

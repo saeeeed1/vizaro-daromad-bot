@@ -162,10 +162,7 @@ async def income_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
 
         await update.message.reply_text(
-            f"📝 <b>Tasdiqlash</b>\n"
-            f"──────────────────────\n"
-            f"Tur:    <b>{desc}</b>\n"
-            f"Summa:  <b>${amount:,.2f}</b>\n\n"
+            f"{desc} · <b>${amount:,.2f}</b>\n"
             f"Tasdiqlaysizmi?",
             parse_mode="HTML",
             reply_markup=confirm_inline("income_yes", "income_no"),
@@ -211,11 +208,7 @@ async def income_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         today = date.today()
 
         await query.edit_message_text(
-            f"💰 <b>Kirim qayd etildi</b>\n"
-            f"─────────────────────────\n"
-            f"📝 Tur:      <b>{income['description']}</b>\n"
-            f"💵 Summa:    <b>${income['amount']:,.2f}</b>\n"
-            f"📅 Sana:     <b>{format_date_uz(today)}</b>\n"
+            f"💰 <b>${income['amount']:,.2f}</b> · {income['description']}\n"
             f"📊 Bu hafta: <b>${week_total:,.2f}</b>",
             parse_mode="HTML",
         )
@@ -225,15 +218,9 @@ async def income_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if config.owner_id and config.owner_id != user_id:
             try:
                 chat = await context.bot.get_chat(user_id)
-                today_total = db.get_today_total_usd(user_id)
                 await context.bot.send_message(
                     config.owner_id,
-                    f"💸 <b>Yangi kirim</b>\n"
-                    f"─────────────────────────\n"
-                    f"👤 Menejer: <b>{chat.full_name}</b>\n"
-                    f"📝 Tur:     <b>{income['description']}</b>\n"
-                    f"💵 Summa:   <b>{display}</b>\n"
-                    f"📊 Bugun:   <b>${today_total:,.2f}</b>",
+                    f"💸 {chat.full_name} · <b>${income['amount']:,.2f}</b> · {income['description']}",
                     parse_mode="HTML",
                 )
             except Exception:
@@ -436,11 +423,7 @@ async def submit_week_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
 
         await update.message.reply_text(
-            f"📦 <b>Haftalik hisobot</b>\n"
-            f"─────────────────────────\n"
-            f"📅 Hafta:    <b>{format_week_range(week_start)}</b>\n"
-            f"📋 Kirimlar: <b>{len(incomes)} ta</b>\n"
-            f"💵 Jami:     <b>${total_usd:,.2f}</b>\n\n"
+            f"📦 Bu hafta: <b>${total_usd:,.2f}</b> · {len(incomes)} ta kirim\n"
             f"Bugalterga topshirasizmi?",
             parse_mode="HTML",
             reply_markup=confirm_inline("submit_yes", "submit_no"),
@@ -480,8 +463,7 @@ async def submit_week_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
 
         await query.edit_message_text(
-            f"✅ <b>Topshirildi!</b>\n\nBugalter tasdiqlaganida xabar keladi.",
-            parse_mode="HTML",
+            "✅ Topshirildi. Bugalter tasdiqlaganida xabar keladi.",
         )
         await context.bot.send_message(user_id, "Bosh menyu:", reply_markup=get_role_keyboard(role))
 
@@ -491,12 +473,7 @@ async def submit_week_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE
             full_name = worker.full_name or str(user_id)
             await context.bot.send_message(
                 config.accountant_id,
-                f"📦 <b>Haftalik hisobot</b>\n"
-                f"─────────────────────────\n"
-                f"👤 Menejer:  <b>{full_name}</b>\n"
-                f"📅 Hafta:     <b>{format_week_range(week_start)}</b>\n"
-                f"💵 Jami:      <b>${submit['total_usd']:,.2f}</b>\n"
-                f"📋 Kirimlar:  <b>{submit['count']} ta</b>",
+                f"📥 {full_name} · <b>${submit['total_usd']:,.2f}</b> · {submit['count']} ta kirim",
                 parse_mode="HTML",
                 reply_markup=accountant_action_inline(submission_id),
             )
