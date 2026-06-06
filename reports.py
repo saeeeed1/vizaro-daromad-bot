@@ -45,7 +45,7 @@ def generate_monthly_excel(
     ws.row_dimensions[1].height = 28
 
     # ── Column headers ─────────────────────────────────────────────────────
-    headers = ["#", "Ishchi", "Tur", "Summa", "Valyuta", "USD", "Sana"]
+    headers = ["#", "Menejer", "Tur", "Summa", "Valyuta", "USD", "Sana"]
     col_widths = [5, 22, 28, 14, 10, 12, 14]
     for col, (h, w) in enumerate(zip(headers, col_widths), 1):
         _hdr_cell(ws, 2, col, h)

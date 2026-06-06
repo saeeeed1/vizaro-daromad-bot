@@ -99,7 +99,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         db.upsert_user(user.id, user.username or "", user.full_name or "", role)
-        role_labels = {"worker": "Ishchi 🧑‍💼", "accountant": "Bugalter 🧮", "owner": "Owner 👁"}
+        role_labels = {"manager": "Menejer 🧑‍💼", "accountant": "Bugalter 🧮", "owner": "Owner 👁"}
 
         await update.message.reply_text(
             f"👋 Xush kelibsiz, <b>{user.full_name}</b>!\n"
@@ -116,7 +116,7 @@ async def start_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def income_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     config: Config = context.bot_data["config"]
-    if config.get_role(update.effective_user.id) not in ("worker", "accountant"):
+    if config.get_role(update.effective_user.id) not in ("manager", "accountant"):
         return ConversationHandler.END
 
     await update.message.reply_text(
@@ -230,7 +230,7 @@ async def income_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     config.owner_id,
                     f"💸 <b>Yangi kirim</b>\n"
                     f"─────────────────────────\n"
-                    f"👤 Ishchi:  <b>{chat.full_name}</b>\n"
+                    f"👤 Menejer: <b>{chat.full_name}</b>\n"
                     f"📝 Tur:     <b>{income['description']}</b>\n"
                     f"💵 Summa:   <b>{display}</b>\n"
                     f"📊 Bugun:   <b>${today_total:,.2f}</b>",
@@ -280,7 +280,7 @@ async def show_week_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db: Database = context.bot_data["db"]
         user_id = update.effective_user.id
 
-        if config.get_role(user_id) not in ("worker", "accountant"):
+        if config.get_role(user_id) not in ("manager", "accountant"):
             return
 
         week_start = get_week_start()
@@ -320,7 +320,7 @@ async def show_month_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
         db: Database = context.bot_data["db"]
         user_id = update.effective_user.id
 
-        if config.get_role(user_id) not in ("worker", "accountant"):
+        if config.get_role(user_id) not in ("manager", "accountant"):
             return
 
         today = date.today()
@@ -367,7 +367,7 @@ async def hisobotim_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = update.effective_user.id
         role = config.get_role(user_id)
 
-        if role not in ("worker", "accountant"):
+        if role not in ("manager", "accountant"):
             return
 
         today = date.today()
@@ -410,7 +410,7 @@ async def submit_week_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db: Database = context.bot_data["db"]
         user_id = update.effective_user.id
 
-        if config.get_role(user_id) not in ("worker", "accountant"):
+        if config.get_role(user_id) not in ("manager", "accountant"):
             return ConversationHandler.END
 
         week_start = get_week_start()
@@ -493,7 +493,7 @@ async def submit_week_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE
                 config.accountant_id,
                 f"📦 <b>Haftalik hisobot</b>\n"
                 f"─────────────────────────\n"
-                f"👤 Ishchi:    <b>{full_name}</b>\n"
+                f"👤 Menejer:  <b>{full_name}</b>\n"
                 f"📅 Hafta:     <b>{format_week_range(week_start)}</b>\n"
                 f"💵 Jami:      <b>${submit['total_usd']:,.2f}</b>\n"
                 f"📋 Kirimlar:  <b>{submit['count']} ta</b>",
@@ -546,7 +546,7 @@ async def workers_list_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         if config.get_role(user_id) != "accountant":
             return
 
-        workers = db.get_all_users_by_role("worker")
+        workers = db.get_all_users_by_role("manager")
         week_start = get_week_start()
         pending_subs = db.get_pending_submissions()
         pending_worker_ids = {s["worker_id"] for s in pending_subs}
@@ -556,7 +556,7 @@ async def workers_list_handler(update: Update, context: ContextTypes.DEFAULT_TYP
             return
 
         lines = [
-            f"👥 <b>Ishchilar — {format_week_range(week_start)}</b>",
+            f"👥 <b>Menejerlar — {format_week_range(week_start)}</b>",
             "─────────────────────────",
         ]
         for w in workers:
@@ -618,7 +618,7 @@ async def weekly_report_handler(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
         week_start = get_week_start()
-        workers     = db.get_all_users_by_role("worker")
+        workers     = db.get_all_users_by_role("manager")
         submissions = db.get_week_submissions_with_worker(week_start)
         sub_by_wid  = {s["worker_id"]: s for s in submissions}
 
@@ -633,7 +633,7 @@ async def weekly_report_handler(update: Update, context: ContextTypes.DEFAULT_TY
             f"📊 <b>Haftalik hisobot — {format_week_range(week_start)}</b>",
             "─────────────────────────",
             "",
-            "👥 <b>Ishchilardan qabul qilindi:</b>",
+            "👥 <b>Menejerlardan qabul qilindi:</b>",
         ]
 
         grand_usd = 0.0
@@ -735,7 +735,7 @@ async def owner_all_workers_handler(update: Update, context: ContextTypes.DEFAUL
             return
 
         week_start = get_week_start()
-        workers    = db.get_all_users_by_role("worker")
+        workers    = db.get_all_users_by_role("manager")
         accountants = db.get_all_users_by_role("accountant")
         pending_subs = db.get_pending_submissions()
         pending_ids  = {s["worker_id"] for s in pending_subs}

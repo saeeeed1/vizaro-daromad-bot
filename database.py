@@ -60,6 +60,8 @@ class Database:
                     created_at TEXT NOT NULL
                 );
             """)
+        # Migration: worker → manager
+        conn.execute("UPDATE users SET role='manager' WHERE role='worker'")
         logger.info("Database initialized")
 
     # ── Users ──────────────────────────────────────────────────────────────
@@ -293,6 +295,27 @@ class Database:
                     "is_submitted":      sub is not None,
                 })
         return result
+
+    def get_week_submissions_with_worker(self, week_start: date) -> List[Dict]:
+        """Hafta uchun barcha topshiriqlar — ishchi ma'lumoti bilan."""
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT ws.*, u.full_name, u.username
+                FROM weekly_submissions ws
+                JOIN users u ON ws.worker_id = u.telegram_user_id
+                WHERE ws.week_start = ?
+                ORDER BY (ws.accountant_action IS NULL), ws.submitted_at ASC
+            """, (week_start.isoformat(),)).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_worker_week_submission(self, worker_id: int, week_start: date) -> Optional[Dict]:
+        """Bir ishchining bir haftadagi topshirig'i."""
+        with self._conn() as conn:
+            row = conn.execute("""
+                SELECT * FROM weekly_submissions
+                WHERE worker_id = ? AND week_start = ?
+            """, (worker_id, week_start.isoformat())).fetchone()
+        return dict(row) if row else None
 
     def get_pending_submissions(self) -> List[Dict]:
         """Submissions awaiting accountant action."""

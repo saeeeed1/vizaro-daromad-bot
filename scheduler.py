@@ -16,7 +16,7 @@ async def _remind_workers(context, second_call: bool = False):
     db: Database = context.bot_data["db"]
     week_start = get_week_start()
 
-    for worker in db.get_all_users_by_role("worker"):
+    for worker in db.get_all_users_by_role("manager"):
         wid = worker["telegram_user_id"]
         if db.has_week_submission(wid, week_start):
             continue
@@ -97,7 +97,7 @@ async def new_week_greeting(context):
     db: Database = context.bot_data["db"]
     week_start = get_week_start()
 
-    staff = db.get_all_users_by_role("worker") + db.get_all_users_by_role("accountant")
+    staff = db.get_all_users_by_role("manager") + db.get_all_users_by_role("accountant")
     for member in staff:
         try:
             await context.bot.send_message(

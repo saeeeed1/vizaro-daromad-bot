@@ -21,14 +21,16 @@ REJECT_REASON = 10
 
 async def accountant_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     config: Config = context.bot_data["config"]
     db: Database = context.bot_data["db"]
     user_id = query.from_user.id
 
+    # Rol tekshiruvi ANSWER DAN OLDIN — ikki marta answer() chaqirilmasin
     if config.get_role(user_id) != "accountant":
         await query.answer("Ruxsat yo'q!", show_alert=True)
         return
+
+    await query.answer()  # Faqat bir marta chaqiriladi
 
     try:
         submission_id = int(query.data.split("_")[-1])
@@ -55,13 +57,13 @@ async def accountant_confirm_callback(update: Update, context: ContextTypes.DEFA
         await query.edit_message_text(
             f"✅ <b>Tasdiqlandi</b>\n"
             f"─────────────────────────\n"
-            f"👤 Ishchi: <b>{full_name}</b>\n"
+            f"👤 Menejer: <b>{full_name}</b>\n"
             f"📅 Hafta:  <b>{format_week_range(week_start)}</b>\n"
             f"💵 Jami:   <b>${submission['total_usd']:,.2f}</b>",
             parse_mode="HTML",
         )
 
-        # Notify worker
+        # Notify manager
         try:
             await context.bot.send_message(
                 worker_id,
@@ -92,14 +94,16 @@ async def accountant_confirm_callback(update: Update, context: ContextTypes.DEFA
 
 async def acc_reject_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     config: Config = context.bot_data["config"]
     db: Database = context.bot_data["db"]
     user_id = query.from_user.id
 
+    # Rol tekshiruvi ANSWER DAN OLDIN
     if config.get_role(user_id) != "accountant":
         await query.answer("Ruxsat yo'q!", show_alert=True)
         return ConversationHandler.END
+
+    await query.answer()  # Faqat bir marta
 
     try:
         submission_id = int(query.data.split("_")[-1])
@@ -149,11 +153,11 @@ async def acc_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
         week_start = date.fromisoformat(submission["week_start"])
 
         await update.message.reply_text(
-            f"✅ Rad etildi. Ishchiga xabar yuborildi.",
+            f"✅ Rad etildi. Menejarga xabar yuborildi.",
             reply_markup=get_role_keyboard(config.get_role(user_id)),
         )
 
-        # Notify worker
+        # Notify manager
         try:
             await context.bot.send_message(
                 worker_id,

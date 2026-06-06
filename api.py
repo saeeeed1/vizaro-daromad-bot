@@ -77,7 +77,7 @@ async def handle_dashboard(req: web.Request) -> web.Response:
     ws = get_week_start()
     UZ_DAYS_SHORT = {0: "Du", 1: "Se", 2: "Ch", 3: "Pa", 4: "Ju", 5: "Sh", 6: "Ya"}
 
-    if role in ("worker", "accountant"):
+    if role in ("manager", "accountant"):
         week_inc   = db.get_week_incomes(user_id, ws)
         month_inc  = db.get_month_incomes(user_id, today.year, today.month)
         week_total = db.get_week_total_usd(user_id, ws)
@@ -111,7 +111,7 @@ async def handle_dashboard(req: web.Request) -> web.Response:
         }))
 
     elif role == "owner":
-        workers     = db.get_all_users_by_role("worker") + db.get_all_users_by_role("accountant")
+        workers     = db.get_all_users_by_role("manager") + db.get_all_users_by_role("accountant")
         week_inc    = db.get_all_incomes_for_week(ws)
         month_inc   = db.get_all_incomes_for_month(today.year, today.month)
         total_week  = sum(i["amount_usd"] for i in week_inc)
@@ -182,7 +182,7 @@ async def handle_history(req: web.Request) -> web.Response:
     role = config.get_role(user_id)
     today = date.today()
 
-    if role in ("worker", "accountant"):
+    if role in ("manager", "accountant"):
         inc = list(reversed(db.get_month_incomes(user_id, today.year, today.month)[-limit:]))
     elif role == "owner":
         inc = list(reversed(db.get_all_incomes_for_month(today.year, today.month)[-limit:]))
@@ -224,7 +224,7 @@ async def handle_accountant(req: web.Request) -> web.Response:
     today = date.today()
     ws    = get_week_start()
 
-    workers     = db.get_all_users_by_role("worker")
+    workers     = db.get_all_users_by_role("manager")
     submissions = db.get_week_submissions_with_worker(ws)
     sub_by_wid  = {s["worker_id"]: s for s in submissions}
 

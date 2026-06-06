@@ -97,9 +97,9 @@ def main():
     # ── Reply keyboard buttons ─────────────────────────────────────────────
     app.add_handler(MessageHandler(filters.Regex("^📊 Bu hafta$"),        show_week_handler))
     app.add_handler(MessageHandler(filters.Regex("^📅 Bu oy$"),            show_month_handler))
-    app.add_handler(MessageHandler(filters.Regex("^👥 Ishchilar$"),        workers_list_handler))
+    app.add_handler(MessageHandler(filters.Regex("^👥 Menejerlar$"),        workers_list_handler))
     app.add_handler(MessageHandler(filters.Regex("^📋 Oylik hisobot$"),    monthly_report_handler))
-    app.add_handler(MessageHandler(filters.Regex("^👥 Barcha ishchilar$"), owner_all_workers_handler))
+    app.add_handler(MessageHandler(filters.Regex("^👥 Barcha menejerlar$"), owner_all_workers_handler))
     app.add_handler(MessageHandler(filters.Regex("^📅 Oylik$"),            owner_monthly_handler))
     app.add_handler(MessageHandler(filters.Regex("^📊 Haftalik$"),         haftalik_dispatch))
 

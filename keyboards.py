@@ -12,20 +12,20 @@ def worker_keyboard() -> ReplyKeyboardMarkup:
 def accountant_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup([
         ["💰 Kirim qo'shish"],
-        ["👥 Ishchilar", "📊 Haftalik"],
+        ["👥 Menejerlar", "📊 Haftalik"],
         ["📋 Oylik hisobot"],
     ], resize_keyboard=True)
 
 
 def owner_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup([
-        ["👥 Barcha ishchilar"],
+        ["👥 Barcha menejerlar"],
         ["📊 Haftalik", "📅 Oylik"],
     ], resize_keyboard=True)
 
 
 def get_role_keyboard(role: str) -> ReplyKeyboardMarkup | ReplyKeyboardRemove:
-    if role == "worker":
+    if role == "manager":
         return worker_keyboard()
     if role == "accountant":
         return accountant_keyboard()

@@ -19,7 +19,7 @@ class Config:
         if user_id == self.accountant_id:
             return "accountant"
         if user_id in self.worker_ids:
-            return "worker"
+            return "manager"
         return "unknown"
 
     def is_authorized(self, user_id: int) -> bool:
