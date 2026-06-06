@@ -90,6 +90,8 @@ async def handle_dashboard(req: web.Request) -> web.Response:
 
         UZ_M_S = {1:"Yan",2:"Fev",3:"Mar",4:"Apr",5:"May",6:"Iyn",
                   7:"Iyl",8:"Avg",9:"Sen",10:"Okt",11:"Noy",12:"Dek"}
+        UZ_M_MED = {1:"Yan",2:"Fev",3:"Mar",4:"Apr",5:"May",6:"Iyun",
+                    7:"Iyul",8:"Avg",9:"Sen",10:"Okt",11:"Noy",12:"Dek"}
 
         def _m_back(n: int):
             m = today.month - n
@@ -113,13 +115,14 @@ async def handle_dashboard(req: web.Request) -> web.Response:
                 ws_it += timedelta(days=7)
                 idx += 1
         elif period in ("3month", "6month", "year"):
-            n_months = {"3month": 3, "6month": 6, "year": 12}[period]
+            n_months  = {"3month": 3, "6month": 6, "year": 12}[period]
+            label_map = UZ_M_MED if period == "3month" else UZ_M_S
             chart = []
             for i in range(n_months - 1, -1, -1):
                 y, m = _m_back(i)
                 incs = db.get_month_incomes(user_id, y, m)
                 total = sum(inc["amount_usd"] for inc in incs)
-                chart.append({"day": UZ_M_S[m], "date": f"{y}-{m:02d}-01", "total": round(total, 2)})
+                chart.append({"day": label_map[m], "date": f"{y}-{m:02d}-01", "total": round(total, 2)})
         else:  # week (default)
             chart = []
             for i in range(6, -1, -1):
