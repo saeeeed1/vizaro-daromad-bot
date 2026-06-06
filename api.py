@@ -78,6 +78,7 @@ async def handle_dashboard(req: web.Request) -> web.Response:
     UZ_DAYS_SHORT = {0: "Du", 1: "Se", 2: "Ch", 3: "Pa", 4: "Ju", 5: "Sh", 6: "Ya"}
 
     if role in ("manager", "accountant"):
+        period     = req.rel_url.query.get("period", "week")
         week_inc   = db.get_week_incomes(user_id, ws)
         month_inc  = db.get_month_incomes(user_id, today.year, today.month)
         week_total = db.get_week_total_usd(user_id, ws)
@@ -87,15 +88,47 @@ async def handle_dashboard(req: web.Request) -> web.Response:
         confirmed = sum(1 for s in subs if s["accountant_action"] == "confirmed")
         pending   = sum(1 for s in subs if not s["accountant_action"])
 
-        # 7-day chart
-        chart = []
-        for i in range(6, -1, -1):
-            d = today - timedelta(days=i)
-            day_total = sum(
-                inc["amount_usd"] for inc in db.get_week_incomes(user_id, get_week_start(d))
-                if inc["created_at"][:10] == d.isoformat()
-            )
-            chart.append({"day": UZ_DAYS_SHORT[d.weekday()], "date": d.isoformat(), "total": round(day_total, 2)})
+        UZ_M_S = {1:"Yan",2:"Fev",3:"Mar",4:"Apr",5:"May",6:"Iyn",
+                  7:"Iyl",8:"Avg",9:"Sen",10:"Okt",11:"Noy",12:"Dek"}
+
+        def _m_back(n: int):
+            m = today.month - n
+            y = today.year
+            while m <= 0:
+                m += 12; y -= 1
+            return y, m
+
+        if period == "month":
+            m_all = db.get_month_incomes(user_id, today.year, today.month)
+            chart = []
+            ws_it = get_week_start(date(today.year, today.month, 1))
+            idx = 1
+            while ws_it <= today:
+                we = ws_it + timedelta(days=6)
+                total = sum(
+                    i["amount_usd"] for i in m_all
+                    if ws_it <= date.fromisoformat(i["created_at"][:10]) <= we
+                )
+                chart.append({"day": f"{idx}-h", "date": ws_it.isoformat(), "total": round(total, 2)})
+                ws_it += timedelta(days=7)
+                idx += 1
+        elif period in ("3month", "6month", "year"):
+            n_months = {"3month": 3, "6month": 6, "year": 12}[period]
+            chart = []
+            for i in range(n_months - 1, -1, -1):
+                y, m = _m_back(i)
+                incs = db.get_month_incomes(user_id, y, m)
+                total = sum(inc["amount_usd"] for inc in incs)
+                chart.append({"day": UZ_M_S[m], "date": f"{y}-{m:02d}-01", "total": round(total, 2)})
+        else:  # week (default)
+            chart = []
+            for i in range(6, -1, -1):
+                d = today - timedelta(days=i)
+                day_total = sum(
+                    inc["amount_usd"] for inc in db.get_week_incomes(user_id, get_week_start(d))
+                    if inc["created_at"][:10] == d.isoformat()
+                )
+                chart.append({"day": UZ_DAYS_SHORT[d.weekday()], "date": d.isoformat(), "total": round(day_total, 2)})
 
         recent = list(reversed(week_inc[-10:]))
         return _cors(web.json_response({
